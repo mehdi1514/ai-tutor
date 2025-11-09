@@ -3,6 +3,7 @@ from app.config import client, MODEL
 from pydantic import BaseModel
 from app.prompts import HINT_PROMPT
 from google import genai
+from app.cache import get_cached_hint, store_hint
 
 app = FastAPI(title="TripleTen AI Tutor")
 
@@ -18,6 +19,11 @@ def root():
 
 @app.post("/generate_hint", response_model=HintResponse)
 def generate_hint(body: HintRequest):
+    # 1️⃣ try cache first
+    if (cached := get_cached_hint(body.question)):
+        return HintResponse(hint=cached)
+
+    # 2️⃣ otherwise call Gemini and store the hint with its quesiton in cache
     try:
         prompt = HINT_PROMPT.format(question=body.question)
         response = client.models.generate_content(
@@ -29,6 +35,8 @@ def generate_hint(body: HintRequest):
             )
         )
         hint = response.text.strip()
+        # 3️⃣ save for next time
+        store_hint(body.question, hint)
         return HintResponse(hint=hint)
     except Exception as e:
         print(e)
